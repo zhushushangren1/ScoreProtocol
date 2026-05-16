@@ -1,0 +1,8 @@
+{
+  "name": "ScoreProtocol",
+  "version": "0.1.0",
+  "description": "Shared CSV and CRC protocol helpers for the LoRa score system.",
+  "keywords": ["score", "lora", "crc", "csv"],
+  "frameworks": "arduino",
+  "platforms": "espressif32"
+}
