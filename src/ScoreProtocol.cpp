@@ -55,17 +55,20 @@ const char* messageTypeToString(MessageType type) {
 // 返回：可直接通过 LoRa UART 发送的整行；参数非法时返回空字符串。
 String buildFrame(const String fields[], uint8_t fieldCount) {
     if (fieldCount == 0 || fieldCount >= MAX_FIELDS) {
+        // fieldCount 为 0 没有消息类型；>= MAX_FIELDS 会挤掉末尾 CRC 字段空间。
         return String();
     }
 
     String payload;
     for (uint8_t i = 0; i < fieldCount; i++) {
         if (i > 0) {
+            // CRC 只覆盖逗号分隔的 payload，不包含最后的 ",CRC\n"。
             payload += ",";
         }
         payload += fields[i];
     }
 
+    // 发送格式固定为 payload + "," + 4位CRC + "\n"，LoRaLink 依赖换行判断帧结束。
     return payload + "," + crc16Hex(crc16Ccitt(payload)) + "\n";
 }
 
@@ -74,17 +77,20 @@ String buildFrame(const String fields[], uint8_t fieldCount) {
 // frame：解析成功时被填充（type、fieldCount、fields）。
 // 返回：true=CRC 通过且首字段是已知消息类型；false=非法、损坏、字段超长或类型未知。
 bool parseFrame(const String& line, ParsedFrame& frame) {
+    // 先清空输出结构，避免解析失败时调用方误读上一帧残留字段。
     frame = ParsedFrame();
 
     String trimmed = line;
     trimmed.trim();
     if (trimmed.length() == 0) {
+        // 空行不算协议帧，常见于 CRLF 或串口噪声。
         return false;
     }
 
     // 找最后一个逗号，把行拆成 "payload" 和 "CRC 文本" 两部分。
     int lastComma = trimmed.lastIndexOf(',');
     if (lastComma <= 0 || lastComma == static_cast<int>(trimmed.length()) - 1) {
+        // 没有逗号、payload 为空、CRC 为空都不是合法帧。
         return false;
     }
 
@@ -93,11 +99,13 @@ bool parseFrame(const String& line, ParsedFrame& frame) {
 
     uint16_t expected = 0;
     if (!parseCrc16Hex(crcText, expected)) {
+        // CRC 字段必须正好 4 个十六进制字符。
         return false;
     }
 
     const uint16_t actual = crc16Ccitt(payload);
     if (actual != expected) {
+        // CRC 不一致说明空中数据或串口数据损坏，业务层不能继续处理。
         return false;
     }
 
@@ -106,16 +114,19 @@ bool parseFrame(const String& line, ParsedFrame& frame) {
     int start = 0;
     while (start <= static_cast<int>(payload.length())) {
         if (count >= MAX_FIELDS) {
+            // 字段数超过定长数组容量时拒绝，避免写越界。
             return false;
         }
 
         int comma = payload.indexOf(',', start);
         if (comma < 0) {
+            // 没找到下一个逗号，说明当前字段是最后一个字段。
             comma = payload.length();
         }
 
         String field = payload.substring(start, comma);
         if (field.length() > MAX_FIELD_LENGTH) {
+            // 限制单字段长度，防止异常长字符串占用过多 ESP32 堆内存。
             return false;
         }
 
@@ -123,16 +134,19 @@ bool parseFrame(const String& line, ParsedFrame& frame) {
         start = comma + 1;
 
         if (comma == static_cast<int>(payload.length())) {
+            // 已切到 payload 末尾，退出循环。
             break;
         }
     }
 
     if (count == 0) {
+        // 理论上 lastComma 校验后不会出现，保留防御逻辑。
         return false;
     }
 
     frame.fieldCount = count;
     frame.type = messageTypeFromString(frame.fields[0]);
+    // 未知消息类型直接返回 false，上层会打印 Invalid protocol frame。
     return frame.type != MessageType::Unknown;
 }
 
@@ -142,6 +156,7 @@ bool parseFrame(const String& line, ParsedFrame& frame) {
 // 返回：true=合法；false=格式不合法或乘 10 累加时溢出。
 bool parseUnsignedLong(const String& text, unsigned long& value) {
     if (text.length() == 0) {
+        // 空串不按 0 处理，避免缺失字段被误接受。
         return false;
     }
 
@@ -149,6 +164,7 @@ bool parseUnsignedLong(const String& text, unsigned long& value) {
     for (uint16_t i = 0; i < text.length(); i++) {
         const char c = text[i];
         if (c < '0' || c > '9') {
+            // 不接受符号、小数点、空格，协议数字字段必须是纯十进制。
             return false;
         }
 
@@ -161,6 +177,7 @@ bool parseUnsignedLong(const String& text, unsigned long& value) {
     }
 
     value = parsed;
+    // 只有完整扫描通过后才写 value，调用方可认为 value 是可信数字。
     return true;
 }
 
@@ -172,15 +189,18 @@ bool parseUnsignedLong(const String& text, unsigned long& value) {
 bool parseIntInRange(const String& text, int minValue, int maxValue, int& value) {
     unsigned long parsed = 0;
     if (!parseUnsignedLong(text, parsed)) {
+        // 先复用无符号解析，统一拒绝空串、负号和非数字字符。
         return false;
     }
 
     if (parsed > static_cast<unsigned long>(maxValue)) {
+        // 先和 maxValue 比较，可避免后面转 int 时溢出。
         return false;
     }
 
     const int parsedInt = static_cast<int>(parsed);
     if (parsedInt < minValue || parsedInt > maxValue) {
+        // minValue 当前主要用于 0，但保留通用闭区间校验。
         return false;
     }
 
