@@ -1,3 +1,5 @@
+// ScoreProtocol CRC 工具实现。
+// 负责计算 CRC-16/CCITT-FALSE、格式化 4 位 CRC 文本，并解析收到的 CRC 字段。
 #include "Crc16.h"
 
 namespace ScoreProtocol {

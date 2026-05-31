@@ -1,3 +1,5 @@
+// ScoreProtocol CRC 工具接口。
+// 两端协议帧都使用这里的 CRC-16/CCITT-FALSE 算法做完整性校验。
 #ifndef SCORE_PROTOCOL_CRC16_H
 #define SCORE_PROTOCOL_CRC16_H
 

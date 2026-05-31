@@ -1,3 +1,5 @@
+// 共享文本协议接口。
+// 定义服务端和裁判端共同使用的消息类型、解析结果结构和组帧/解析函数。
 #ifndef SCORE_PROTOCOL_H
 #define SCORE_PROTOCOL_H
 

@@ -1,3 +1,5 @@
+// 共享文本协议实现。
+// 负责构造 CSV+CRC 协议帧、解析入站帧、识别消息类型和校验数字字段。
 #include "ScoreProtocol.h"
 
 #include "Crc16.h"
